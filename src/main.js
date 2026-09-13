@@ -1,163 +1,184 @@
-// ==========================================
-// 1. CAAS STATE ENGINE CLASS
-// ==========================================
-class CAASStateEngine {
-    constructor() {
-        this.storageKey = 'caas_erp_state';
-        this.state = this.loadState() || {
-            company_master: { name: 'CAAS Enterprise', fy: '2026-27' },
-            chart_of_accounts: [],
-            vouchers: []
-        };
-    }
+import './style.css';
 
-    loadState() {
-        const saved = localStorage.getItem(this.storageKey);
-        return saved ? JSON.parse(saved) : null;
-    }
+// Initialize ledger state from LocalStorage or empty array
+let transactions = JSON.parse(localStorage.getItem('caas_ledger_state')) || [];
 
-    saveState() {
-        localStorage.setItem(this.storageKey, JSON.stringify(this.state));
-    }
-
-    getState() {
-        return this.state;
-    }
-
-    postVoucher(payload) {
-        // Validate Debit / Credit Sum Equality
-        const totalDebit = payload.lines.reduce((acc, l) => acc + (l.debit || 0), 0);
-        const totalCredit = payload.lines.reduce((acc, l) => acc + (l.credit || 0), 0);
-
-        if (Math.abs(totalDebit - totalCredit) > 0.001) {
-            throw new Error(`Imbalanced Voucher: Total Debit (${totalDebit}) must equal Total Credit (${totalCredit}).`);
-        }
-
-        const voucher = {
-            voucherId: 'VOUCH-' + Date.now(),
-            timestamp: new Date().toISOString(),
-            ...payload
-        };
-
-        this.state.vouchers.push(voucher);
-        this.saveState();
-        return voucher;
-    }
-}
-
-// Initialize Engine globally on window
-window.caasEngine = new CAASStateEngine();
-
-// ==========================================
-// 2. RENDER HTML INTERFACE
-// ==========================================
 const app = document.getElementById('app');
 
+// Render complete UI
 app.innerHTML = `
-  <div style="max-width: 800px; margin: 2rem auto; font-family: sans-serif; padding: 0 1rem;">
-    <h2>CAAS ERP - General Ledger Entry</h2>
+  <div class="container">
+    <h2>CAAS ERP - General Ledger & Trial Balance</h2>
     
-    <div id="statusMessage" style="margin-bottom: 1rem; padding: 0.75rem; display: none; border-radius: 4px;"></div>
-
-    <form id="voucherForm" style="display: grid; gap: 1rem; background: #f9f9f9; padding: 1.5rem; border: 1px solid #ddd; border-radius: 6px;">
-      <div>
-        <label><strong>Voucher Type:</strong></label><br/>
-        <select id="voucherType" style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;">
-          <option value="JOURNAL">Journal Voucher</option>
-          <option value="PAYMENT">Payment</option>
-          <option value="RECEIPT">Receipt</option>
+    <!-- Voucher Input Form -->
+    <div class="card">
+      <div class="form-group">
+        <label>Voucher Type:</label>
+        <select id="vType">
+          <option value="JV">Journal Voucher</option>
+          <option value="BP">Bank Payment</option>
+          <option value="BR">Bank Receipt</option>
         </select>
       </div>
 
-      <div>
-        <label><strong>Voucher Date:</strong></label><br/>
-        <input type="date" id="voucherDate" value="${new Date().toISOString().split('T')[0]}" style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;" />
+      <div class="form-group">
+        <label>Voucher Date:</label>
+        <input type="date" id="vDate" value="${new Date().toISOString().split('T')[0]}" />
       </div>
 
-      <hr style="width: 100%; border: 0; border-top: 1px solid #ccc; margin: 0.5rem 0;" />
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-        <div>
-          <label><strong>Debit Account Code:</strong></label>
-          <input type="text" id="debitAccount" placeholder="e.g. 1001" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;" />
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Debit Account Code:</label>
+          <input type="text" id="drCode" placeholder="e.g. 1001" />
         </div>
-        <div>
-          <label><strong>Debit Amount (₹):</strong></label>
-          <input type="number" id="debitAmount" step="0.01" placeholder="0.00" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;" />
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-        <div>
-          <label><strong>Credit Account Code:</strong></label>
-          <input type="text" id="creditAccount" placeholder="e.g. 2001" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;" />
-        </div>
-        <div>
-          <label><strong>Credit Amount (₹):</strong></label>
-          <input type="number" id="creditAmount" step="0.01" placeholder="0.00" required style="width: 100%; padding: 0.5rem; margin-top: 0.25rem;" />
+        <div class="form-group">
+          <label>Debit Amount (₹):</label>
+          <input type="number" id="drAmt" step="0.01" placeholder="0.00" />
         </div>
       </div>
 
-      <button type="submit" style="padding: 0.75rem; background: #0066cc; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; margin-top: 0.5rem;">
-        Post Voucher
-      </button>
-    </form>
+      <div class="grid-2">
+        <div class="form-group">
+          <label>Credit Account Code:</label>
+          <input type="text" id="crCode" placeholder="e.g. 2001" />
+        </div>
+        <div class="form-group">
+          <label>Credit Amount (₹):</label>
+          <input type="number" id="crAmt" step="0.01" placeholder="0.00" />
+        </div>
+      </div>
 
-    <h3 style="margin-top: 2rem;">Posted Transactions Log</h3>
-    <pre id="transactionLog" style="background: #1e1e1e; color: #00ff00; padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 250px;"></pre>
+      <button id="postBtn" class="btn-primary">Post Voucher</button>
+    </div>
+
+    <!-- Trial Balance Module -->
+    <h3>Real-Time Trial Balance</h3>
+    <div class="card">
+      <table id="tbTable" style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="border-bottom: 2px solid #ccc;">
+            <th style="padding: 8px;">Account Code</th>
+            <th style="padding: 8px; text-align: right;">Total Debit (₹)</th>
+            <th style="padding: 8px; text-align: right;">Total Credit (₹)</th>
+            <th style="padding: 8px; text-align: right;">Net Balance (₹)</th>
+          </tr>
+        </thead>
+        <tbody id="tbBody"></tbody>
+        <tfoot>
+          <tr id="tbFooter" style="border-top: 2px solid #333; font-weight: bold;"></tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <!-- Posted Transactions Log -->
+    <h3>Posted Transactions Log</h3>
+    <pre id="log" class="log-box">${JSON.stringify(transactions, null, 2)}</pre>
   </div>
 `;
 
-// ==========================================
-// 3. UI FORM EVENT HANDLERS & BINDINGS
-// ==========================================
-const voucherForm = document.getElementById('voucherForm');
-const statusBox = document.getElementById('statusMessage');
-const transactionLog = document.getElementById('transactionLog');
+// Calculate & Render Trial Balance
+function renderTrialBalance() {
+  const accountBalances = {};
 
-function updateLog() {
-    const state = window.caasEngine.getState();
-    transactionLog.textContent = JSON.stringify(state.vouchers, null, 2);
+  transactions.forEach((v) => {
+    v.lines.forEach((line) => {
+      if (!accountBalances[line.account_code]) {
+        accountBalances[line.account_code] = { debit: 0, credit: 0 };
+      }
+      accountBalances[line.account_code].debit += Number(line.debit) || 0;
+      accountBalances[line.account_code].credit += Number(line.credit) || 0;
+    });
+  });
+
+  const tbBody = document.getElementById('tbBody');
+  const tbFooter = document.getElementById('tbFooter');
+  
+  tbBody.innerHTML = '';
+  let grandDebit = 0;
+  let grandCredit = 0;
+
+  const codes = Object.keys(accountBalances).sort();
+
+  if (codes.length === 0) {
+    tbBody.innerHTML = `<tr><td colspan="4" style="padding: 12px; text-align: center; color: #666;">No posted vouchers yet.</td></tr>`;
+    tbFooter.innerHTML = '';
+    return;
+  }
+
+  codes.forEach((code) => {
+    const dr = accountBalances[code].debit;
+    const cr = accountBalances[code].credit;
+    const net = dr - cr;
+
+    grandDebit += dr;
+    grandCredit += cr;
+
+    const row = document.createElement('tr');
+    row.style.borderBottom = '1px solid #eee';
+    row.innerHTML = `
+      <td style="padding: 8px;"><strong>${code}</strong></td>
+      <td style="padding: 8px; text-align: right;">${dr.toFixed(2)}</td>
+      <td style="padding: 8px; text-align: right;">${cr.toFixed(2)}</td>
+      <td style="padding: 8px; text-align: right; color: ${net >= 0 ? '#10b981' : '#ef4444'}; font-weight: 500;">
+        ${Math.abs(net).toFixed(2)} ${net >= 0 ? 'Dr' : 'Cr'}
+      </td>
+    `;
+    tbBody.appendChild(row);
+  });
+
+  const isBalanced = Math.abs(grandDebit - grandCredit) < 0.01;
+
+  tbFooter.innerHTML = `
+    <td style="padding: 8px;">Total (${isBalanced ? 'Balanced' : 'Unbalanced'})</td>
+    <td style="padding: 8px; text-align: right;">${grandDebit.toFixed(2)}</td>
+    <td style="padding: 8px; text-align: right;">${grandCredit.toFixed(2)}</td>
+    <td style="padding: 8px; text-align: right; color: ${isBalanced ? '#10b981' : '#ef4444'};">
+      ${isBalanced ? '✓ Balanced' : '✗ Difference'}
+    </td>
+  `;
 }
 
-voucherForm.addEventListener('submit', (e) => {
-    e.preventDefault();
+// Initial render of Trial Balance
+renderTrialBalance();
 
-    const voucherType = document.getElementById('voucherType').value;
-    const voucherDate = document.getElementById('voucherDate').value;
-    const debitAccount = document.getElementById('debitAccount').value;
-    const debitAmount = parseFloat(document.getElementById('debitAmount').value || 0);
-    const creditAccount = document.getElementById('creditAccount').value;
-    const creditAmount = parseFloat(document.getElementById('creditAmount').value || 0);
+// Voucher Posting Event Handler
+document.getElementById('postBtn').addEventListener('click', () => {
+  const type = document.getElementById('vType').value;
+  const date = document.getElementById('vDate').value;
+  const drCode = document.getElementById('drCode').value.trim();
+  const drAmt = parseFloat(document.getElementById('drAmt').value) || 0;
+  const crCode = document.getElementById('crCode').value.trim();
+  const crAmt = parseFloat(document.getElementById('crAmt').value) || 0;
 
-    const payload = {
-        type: voucherType,
-        date: voucherDate,
-        lines: [
-            { accountId: debitAccount, debit: debitAmount, credit: 0 },
-            { accountId: creditAccount, debit: 0, credit: creditAmount }
-        ]
-    };
+  if (!drCode || !crCode) {
+    alert('Please provide valid Debit and Credit account codes.');
+    return;
+  }
 
-    try {
-        const result = window.caasEngine.postVoucher(payload);
-        
-        statusBox.style.display = 'block';
-        statusBox.style.background = '#d4edda';
-        statusBox.style.color = '#155724';
-        statusBox.textContent = `Voucher ${result.voucherId} successfully posted!`;
+  if (drAmt <= 0 || crAmt <= 0 || drAmt !== crAmt) {
+    alert('Debit and Credit amounts must be non-zero and equal.');
+    return;
+  }
 
-        voucherForm.reset();
-        document.getElementById('voucherDate').value = new Date().toISOString().split('T')[0];
-        updateLog();
+  const newVoucher = {
+    voucher_id: 'VOUCH-' + Date.now().toString().slice(-6),
+    type,
+    date,
+    lines: [
+      { account_code: drCode, debit: drAmt, credit: 0 },
+      { account_code: crCode, debit: 0, credit: crAmt }
+    ]
+  };
 
-    } catch (err) {
-        statusBox.style.display = 'block';
-        statusBox.style.background = '#f8d7da';
-        statusBox.style.color = '#721c24';
-        statusBox.textContent = `Validation Error: ${err.message}`;
-    }
+  transactions.push(newVoucher);
+  localStorage.setItem('caas_ledger_state', JSON.stringify(transactions));
+
+  document.getElementById('log').textContent = JSON.stringify(transactions, null, 2);
+  renderTrialBalance();
+
+  // Reset inputs
+  document.getElementById('drCode').value = '';
+  document.getElementById('drAmt').value = '';
+  document.getElementById('crCode').value = '';
+  document.getElementById('crAmt').value = '';
 });
-
-// Initial log update on page load
-updateLog();

@@ -1,5 +1,3 @@
-import './style.css';
-
 // Initialize ledger state from LocalStorage or empty array
 let transactions = JSON.parse(localStorage.getItem('caas_ledger_state')) || [];
 

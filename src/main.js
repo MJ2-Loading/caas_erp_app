@@ -38,7 +38,7 @@ const app = document.getElementById('app');
 
 app.innerHTML = `
   <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 1100px; margin: 20px auto; padding: 0 20px; color: #1f2937;">
-    <h2 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">CAAS ERP - Financial Engine & Audit Core</h2>
+    <h2 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">CAAS ERP - Complete Financial & Audit Engine</h2>
 
     <!-- COA Creation Engine -->
     <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
@@ -162,11 +162,52 @@ app.innerHTML = `
       </button>
     </div>
 
+    <!-- Schedule III Financial Statements Module -->
+    <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
+      <h3 style="margin-top: 0; margin-bottom: 16px; color: #0f172a;">Schedule III Financial Statements (Ind AS Aligned)</h3>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <!-- Profit & Loss Statement -->
+        <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px;">
+          <h4 style="margin-top: 0; color: #0f172a; border-bottom: 2px solid #0284c7; padding-bottom: 6px;">Statement of Profit & Loss</h4>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid #e2e8f0; text-align: left; color: #475569;">
+                <th style="padding: 6px 0;">Particulars</th>
+                <th style="padding: 6px 0; text-align: right;">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="pnlBody"></tbody>
+            <tfoot>
+              <tr id="pnlFooter" style="border-top: 2px solid #0f172a; font-weight: bold;"></tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <!-- Balance Sheet -->
+        <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px;">
+          <h4 style="margin-top: 0; color: #0f172a; border-bottom: 2px solid #0284c7; padding-bottom: 6px;">Balance Sheet</h4>
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="border-bottom: 1px solid #e2e8f0; text-align: left; color: #475569;">
+                <th style="padding: 6px 0;">Particulars</th>
+                <th style="padding: 6px 0; text-align: right;">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="bsBody"></tbody>
+            <tfoot>
+              <tr id="bsFooter" style="border-top: 2px solid #0f172a; font-weight: bold;"></tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Voucher Audit Trail & Ledger View -->
     <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h3 style="margin: 0; color: #0f172a;">Voucher Audit Trail & General Ledger</h3>
-        <div style="display: flex; gap: 10px;">
+        <div>
           <select id="ledgerFilterSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
             <option value="ALL">Show All Accounts (Full Audit)</option>
           </select>
@@ -254,14 +295,12 @@ function renderCOATable() {
     `;
   }).join('');
 
-  // Update voucher entry line selectors
   document.querySelectorAll('.line-code').forEach(select => {
     const currentVal = select.value;
     select.innerHTML = getCoAOptionsHTML();
     if (currentVal) select.value = currentVal;
   });
 
-  // Populate Ledger Filter
   const ledgerSelect = document.getElementById('ledgerFilterSelect');
   const currentFilter = ledgerSelect.value;
   ledgerSelect.innerHTML = `<option value="ALL">Show All Accounts (Full Audit)</option>` +
@@ -269,7 +308,7 @@ function renderCOATable() {
   if (currentFilter) ledgerSelect.value = currentFilter;
 }
 
-// Render Voucher Audit Trail & Ledger View
+// Render Voucher Audit Trail
 function renderAuditTrail() {
   const tbody = document.getElementById('auditTrailBody');
   const filterCode = document.getElementById('ledgerFilterSelect').value;
@@ -281,7 +320,6 @@ function renderAuditTrail() {
     return;
   }
 
-  // Reverse to show newest vouchers first
   const sortedTx = [...transactions].reverse();
 
   sortedTx.forEach((v) => {
@@ -310,6 +348,84 @@ function renderAuditTrail() {
 }
 
 document.getElementById('ledgerFilterSelect').addEventListener('change', renderAuditTrail);
+
+// Schedule III Aggregator Engine (P&L and Balance Sheet)
+function renderScheduleIIIFinancials(accountBalances) {
+  const tagTotals = {};
+
+  // Group balances by Schedule III Tag
+  Object.keys(accountBalances).forEach(code => {
+    const coaItem = coaMaster.find(a => String(a.code) === String(code));
+    if (!coaItem) return;
+
+    const tag = coaItem.tag;
+    const net = accountBalances[code].debit - accountBalances[code].credit;
+
+    if (!tagTotals[tag]) tagTotals[tag] = 0;
+    tagTotals[tag] += net;
+  });
+
+  // Profit & Loss Mapping
+  const revOps = Math.abs(tagTotals['Revenue from Operations'] || 0);
+  const costMat = tagTotals['Cost of Materials Consumed'] || 0;
+  const otherExp = tagTotals['Other Operating Expenses'] || 0;
+
+  const totalRevenue = revOps;
+  const totalExpenses = costMat + otherExp;
+  const netProfit = totalRevenue - totalExpenses;
+
+  const pnlBody = document.getElementById('pnlBody');
+  pnlBody.innerHTML = `
+    <tr><td style="padding: 6px 0;"><strong>I. Revenue from Operations</strong></td><td style="padding: 6px 0; text-align: right;">₹${revOps.toFixed(2)}</td></tr>
+    <tr style="border-bottom: 1px solid #cbd5e1; font-weight: 600;"><td style="padding: 6px 0;">Total Revenue</td><td style="padding: 6px 0; text-align: right;">₹${totalRevenue.toFixed(2)}</td></tr>
+    <tr><td style="padding: 6px 0; padding-top: 10px;"><strong>II. Expenses:</strong></td><td></td></tr>
+    <tr><td style="padding: 4px 0 4px 12px; color: #475569;">Cost of Materials Consumed</td><td style="padding: 4px 0; text-align: right;">₹${costMat.toFixed(2)}</td></tr>
+    <tr><td style="padding: 4px 0 4px 12px; color: #475569;">Other Operating Expenses</td><td style="padding: 4px 0; text-align: right;">₹${otherExp.toFixed(2)}</td></tr>
+    <tr style="border-bottom: 1px solid #cbd5e1; font-weight: 600;"><td style="padding: 6px 0;">Total Expenses</td><td style="padding: 6px 0; text-align: right;">₹${totalExpenses.toFixed(2)}</td></tr>
+  `;
+
+  document.getElementById('pnlFooter').innerHTML = `
+    <td style="padding: 8px 0; color: ${netProfit >= 0 ? '#16a34a' : '#dc2626'};">Profit / (Loss) Before Tax</td>
+    <td style="padding: 8px 0; text-align: right; color: ${netProfit >= 0 ? '#16a34a' : '#dc2626'};">₹${netProfit.toFixed(2)}</td>
+  `;
+
+  // Balance Sheet Mapping
+  const shareCapital = Math.abs(tagTotals['Share Capital'] || 0);
+  const reservesSurplus = (Math.abs(tagTotals['Reserves & Surplus'] || 0)) + netProfit;
+  const ppe = tagTotals['Property, Plant & Equipment'] || 0;
+  const tradePayables = Math.abs(tagTotals['Trade Payables'] || 0);
+  const otherCurrentLiab = Math.abs(tagTotals['Other Current Liabilities'] || 0);
+  const cashEquiv = tagTotals['Cash & Cash Equivalents'] || 0;
+  const tradeReceivables = tagTotals['Trade Receivables'] || 0;
+  const inventories = tagTotals['Inventories'] || 0;
+
+  const totalEquityLiabilities = shareCapital + reservesSurplus + tradePayables + otherCurrentLiab;
+  const totalAssets = ppe + cashEquiv + tradeReceivables + inventories;
+
+  const bsBody = document.getElementById('bsBody');
+  bsBody.innerHTML = `
+    <tr><td style="padding: 4px 0;"><strong>EQUITY AND LIABILITIES</strong></td><td></td></tr>
+    <tr><td style="padding: 4px 0 4px 10px; font-weight: 600;">1. Shareholders' Funds</td><td></td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Share Capital</td><td style="padding: 2px 0; text-align: right;">₹${shareCapital.toFixed(2)}</td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Reserves & Surplus (Inc. P&L)</td><td style="padding: 2px 0; text-align: right;">₹${reservesSurplus.toFixed(2)}</td></tr>
+    <tr><td style="padding: 4px 0 4px 10px; font-weight: 600;">2. Current Liabilities</td><td></td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Trade Payables</td><td style="padding: 2px 0; text-align: right;">₹${tradePayables.toFixed(2)}</td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Other Current Liabilities</td><td style="padding: 2px 0; text-align: right;">₹${otherCurrentLiab.toFixed(2)}</td></tr>
+    
+    <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 6px 0;"><strong>ASSETS</strong></td><td></td></tr>
+    <tr><td style="padding: 4px 0 4px 10px; font-weight: 600;">1. Non-Current Assets</td><td></td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Property, Plant & Equipment</td><td style="padding: 2px 0; text-align: right;">₹${ppe.toFixed(2)}</td></tr>
+    <tr><td style="padding: 4px 0 4px 10px; font-weight: 600;">2. Current Assets</td><td></td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Cash & Cash Equivalents</td><td style="padding: 2px 0; text-align: right;">₹${cashEquiv.toFixed(2)}</td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Trade Receivables</td><td style="padding: 2px 0; text-align: right;">₹${tradeReceivables.toFixed(2)}</td></tr>
+    <tr><td style="padding: 2px 0 2px 20px; color: #475569;">Inventories</td><td style="padding: 2px 0; text-align: right;">₹${inventories.toFixed(2)}</td></tr>
+  `;
+
+  document.getElementById('bsFooter').innerHTML = `
+    <td style="padding: 8px 0;">Total Equity & Liabilities: ₹${totalEquityLiabilities.toFixed(2)}</td>
+    <td style="padding: 8px 0; text-align: right;">Total Assets: ₹${totalAssets.toFixed(2)}</td>
+  `;
+}
 
 // Group Selection Handler
 const accountGroupSelect = document.getElementById('accountGroup');
@@ -476,6 +592,7 @@ function renderTrialBalance() {
   if (codes.length === 0) {
     tbBody.innerHTML = `<tr><td colspan="5" style="padding: 12px; text-align: center; color: #6b7280;">No posted vouchers yet.</td></tr>`;
     tbFooter.innerHTML = '';
+    renderScheduleIIIFinancials({});
     return;
   }
 
@@ -514,6 +631,8 @@ function renderTrialBalance() {
       ${isBalanced ? '✓ Balanced' : 'Differing'}
     </td>
   `;
+
+  renderScheduleIIIFinancials(accountBalances);
 }
 
 // Post Voucher Action

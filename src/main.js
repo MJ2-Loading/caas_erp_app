@@ -37,10 +37,10 @@ try {
 const app = document.getElementById('app');
 
 app.innerHTML = `
-  <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 1050px; margin: 20px auto; padding: 0 20px; color: #1f2937;">
-    <h2 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">CAAS ERP - Complete Financial Engine</h2>
+  <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 1100px; margin: 20px auto; padding: 0 20px; color: #1f2937;">
+    <h2 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">CAAS ERP - Financial Engine & Audit Core</h2>
 
-    <!-- COA Creation Engine (Strategic Manual Assignment) -->
+    <!-- COA Creation Engine -->
     <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
       <h3 style="margin-top: 0; margin-bottom: 16px; color: #0f172a;">Chart of Accounts (COA) Creation Engine</h3>
       
@@ -48,8 +48,6 @@ app.innerHTML = `
 
       <form id="coaForm">
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
-          
-          <!-- Account Group -->
           <div>
             <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #475569;">Account Group *</label>
             <select id="accountGroup" style="width: 100%; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" required>
@@ -65,7 +63,6 @@ app.innerHTML = `
             </select>
           </div>
 
-          <!-- Strategic GL Code Entry -->
           <div>
             <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #475569;">
               GL Code * <span id="rangeHint" style="font-weight: normal; color: #64748b; font-size: 11px;">(Select group)</span>
@@ -73,13 +70,11 @@ app.innerHTML = `
             <input type="number" id="glCode" style="width: 100%; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="e.g. 1010" required />
           </div>
 
-          <!-- GL Account Name -->
           <div>
             <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #475569;">GL Account Name *</label>
             <input type="text" id="glName" style="width: 100%; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" placeholder="e.g. HDFC Bank Account" required />
           </div>
 
-          <!-- Default Balance Type -->
           <div>
             <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #475569;">Balance Type</label>
             <select id="balanceType" style="width: 100%; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; background-color: #f1f5f9;" disabled>
@@ -88,7 +83,6 @@ app.innerHTML = `
             </select>
           </div>
 
-          <!-- Schedule III Tag -->
           <div>
             <label style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #475569;">Schedule III Tag *</label>
             <select id="scheduleTag" style="width: 100%; padding: 9px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px;" required>
@@ -168,7 +162,35 @@ app.innerHTML = `
       </button>
     </div>
 
-    <!-- Trial Balance Display -->
+    <!-- Voucher Audit Trail & Ledger View -->
+    <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; color: #0f172a;">Voucher Audit Trail & General Ledger</h3>
+        <div style="display: flex; gap: 10px;">
+          <select id="ledgerFilterSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;">
+            <option value="ALL">Show All Accounts (Full Audit)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+          <thead>
+            <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569;">
+              <th style="padding: 10px;">Voucher ID</th>
+              <th style="padding: 10px;">Date</th>
+              <th style="padding: 10px;">Type</th>
+              <th style="padding: 10px;">GL Account Details</th>
+              <th style="padding: 10px; text-align: right;">Debit (₹)</th>
+              <th style="padding: 10px; text-align: right;">Credit (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="auditTrailBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Real-Time Trial Balance -->
     <h3 style="margin-bottom: 12px;">Real-Time Trial Balance</h3>
     <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
       <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px;">
@@ -215,7 +237,7 @@ function getCoAOptionsHTML() {
   ).join('');
 }
 
-// Render Master COA Table (Sorted Numerically)
+// Render Master COA Table & Ledger Filter Select
 function renderCOATable() {
   coaMaster.sort((a, b) => Number(a.code) - Number(b.code));
   const tbody = document.getElementById('coaTableBody');
@@ -232,13 +254,62 @@ function renderCOATable() {
     `;
   }).join('');
 
-  // Update existing dropdowns dynamically
+  // Update voucher entry line selectors
   document.querySelectorAll('.line-code').forEach(select => {
     const currentVal = select.value;
     select.innerHTML = getCoAOptionsHTML();
     if (currentVal) select.value = currentVal;
   });
+
+  // Populate Ledger Filter
+  const ledgerSelect = document.getElementById('ledgerFilterSelect');
+  const currentFilter = ledgerSelect.value;
+  ledgerSelect.innerHTML = `<option value="ALL">Show All Accounts (Full Audit)</option>` +
+    coaMaster.map(acc => `<option value="${acc.code}">${acc.code} - ${acc.name}</option>`).join('');
+  if (currentFilter) ledgerSelect.value = currentFilter;
 }
+
+// Render Voucher Audit Trail & Ledger View
+function renderAuditTrail() {
+  const tbody = document.getElementById('auditTrailBody');
+  const filterCode = document.getElementById('ledgerFilterSelect').value;
+
+  tbody.innerHTML = '';
+
+  if (transactions.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="padding: 14px; text-align: center; color: #94a3b8;">No posted vouchers found in the audit trail.</td></tr>`;
+    return;
+  }
+
+  // Reverse to show newest vouchers first
+  const sortedTx = [...transactions].reverse();
+
+  sortedTx.forEach((v) => {
+    const matchingLines = filterCode === 'ALL'
+      ? v.lines
+      : v.lines.filter(l => String(l.account_code) === String(filterCode));
+
+    if (matchingLines.length === 0) return;
+
+    matchingLines.forEach((line, index) => {
+      const row = document.createElement('tr');
+      row.style.borderBottom = index === matchingLines.length - 1 ? '2px solid #e2e8f0' : '1px solid #f1f5f9';
+      if (index === 0) row.style.backgroundColor = '#fafafa';
+
+      row.innerHTML = `
+        <td style="padding: 8px 10px; font-weight: 600; color: #0284c7;">${index === 0 ? v.voucher_id : ''}</td>
+        <td style="padding: 8px 10px; color: #64748b;">${index === 0 ? v.date : ''}</td>
+        <td style="padding: 8px 10px; font-weight: 500;">${index === 0 ? `<span style="background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-size: 11px;">${v.type}</span>` : ''}</td>
+        <td style="padding: 8px 10px;"><strong>${line.account_code}</strong> - ${line.account_name}</td>
+        <td style="padding: 8px 10px; text-align: right; font-family: monospace;">${line.debit > 0 ? line.debit.toFixed(2) : '-'}</td>
+        <td style="padding: 8px 10px; text-align: right; font-family: monospace;">${line.credit > 0 ? line.credit.toFixed(2) : '-'}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  });
+}
+
+document.getElementById('ledgerFilterSelect').addEventListener('change', renderAuditTrail);
 
 // Group Selection Handler
 const accountGroupSelect = document.getElementById('accountGroup');
@@ -274,20 +345,17 @@ document.getElementById('coaForm').addEventListener('submit', (e) => {
 
   const rangeInfo = RANGE_DEFINITIONS[groupKey];
 
-  // Validation 1: Range Boundary Check
   if (code < rangeInfo.min || code > rangeInfo.max) {
     showAlert(`Invalid GL Code! For ${rangeInfo.name}, the code must fall between ${rangeInfo.min} and ${rangeInfo.max}.`, 'danger');
     return;
   }
 
-  // Validation 2: Uniqueness Check
   const codeExists = coaMaster.some((acc) => Number(acc.code) === code);
   if (codeExists) {
     showAlert(`GL Code ${code} already exists in the Chart of Accounts! Please choose an unused code.`, 'danger');
     return;
   }
 
-  // Save GL Account
   coaMaster.push({ code, name, groupKey, balance, tag });
   localStorage.setItem('caas_master_coa', JSON.stringify(coaMaster));
 
@@ -496,6 +564,7 @@ document.getElementById('postBtn').addEventListener('click', () => {
   localStorage.setItem('caas_ledger_state', JSON.stringify(transactions));
 
   renderTrialBalance();
+  renderAuditTrail();
 
   document.getElementById('lineItemsBody').innerHTML = '';
   addLineRow('Dr');
@@ -507,3 +576,4 @@ renderCOATable();
 addLineRow('Dr');
 addLineRow('Cr');
 renderTrialBalance();
+renderAuditTrail();

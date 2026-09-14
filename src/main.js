@@ -34,11 +34,64 @@ try {
   transactions = [];
 }
 
+// System System Activity Log (Delta & Mutation Tracker)
+let auditLogs = [];
+try {
+  auditLogs = JSON.parse(localStorage.getItem('caas_audit_logs')) || [];
+} catch (e) {
+  auditLogs = [];
+}
+
+// Period Close Lock State
+let periodLockState = {
+  status: 'OPEN', // OPEN, SOFT_CLOSED, HARD_CLOSED
+  closedBeforeDate: ''
+};
+try {
+  const savedState = JSON.parse(localStorage.getItem('caas_period_lock'));
+  if (savedState) periodLockState = savedState;
+} catch (e) {}
+
 const app = document.getElementById('app');
 
 app.innerHTML = `
-  <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 1100px; margin: 20px auto; padding: 0 20px; color: #1f2937;">
-    <h2 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">CAAS ERP - Complete Financial & Audit Engine</h2>
+  <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 1150px; margin: 20px auto; padding: 0 20px; color: #1f2937;">
+    <h2 style="border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 20px;">CAAS ERP - Complete Financial & Audit Engine</h2>
+
+    <!-- Operational Control Toolbar -->
+    <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      
+      <!-- Feature 1: Period-Close Locking Controls -->
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 13px; font-weight: 700; color: #0f172a;">Period Status:</span>
+        <select id="periodStatusSelect" style="padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: 600;">
+          <option value="OPEN" ${periodLockState.status === 'OPEN' ? 'selected' : ''}>Open (All Edits Allowed)</option>
+          <option value="SOFT_CLOSED" ${periodLockState.status === 'SOFT_CLOSED' ? 'selected' : ''}>Soft-Closed (Warning on Entry)</option>
+          <option value="HARD_CLOSED" ${periodLockState.status === 'HARD_CLOSED' ? 'selected' : ''}>Hard-Closed (Postings Frozen)</option>
+        </select>
+        
+        <label style="font-size: 13px; color: #475569;">Lock Before Date:</label>
+        <input type="date" id="lockBeforeDate" value="${periodLockState.closedBeforeDate}" style="padding: 5px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px;" />
+        
+        <button id="savePeriodLockBtn" style="background-color: #334155; color: white; border: none; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: 600;">
+          Update Lock Policy
+        </button>
+      </div>
+
+      <!-- Feature 3: Data Export & Backup Actions -->
+      <div style="display: flex; gap: 8px;">
+        <button id="exportBackupBtn" style="background-color: #0284c7; color: white; border: none; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: 600;">
+          ↓ Download JSON Backup
+        </button>
+        <label style="background-color: #475569; color: white; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: 600; display: inline-block;">
+          ↑ Restore JSON Backup
+          <input type="file" id="restoreBackupInput" accept=".json" style="display: none;" />
+        </label>
+        <button id="printFinancialsBtn" style="background-color: #059669; color: white; border: none; padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; font-weight: 600;">
+          🖨 Print Statements
+        </button>
+      </div>
+    </div>
 
     <!-- COA Creation Engine -->
     <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
@@ -163,7 +216,7 @@ app.innerHTML = `
     </div>
 
     <!-- Schedule III Financial Statements Module -->
-    <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
+    <div id="financialStatementsSection" style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
       <h3 style="margin-top: 0; margin-bottom: 16px; color: #0f172a;">Schedule III Financial Statements (Ind AS Aligned)</h3>
       
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
@@ -224,9 +277,28 @@ app.innerHTML = `
               <th style="padding: 10px;">GL Account Details</th>
               <th style="padding: 10px; text-align: right;">Debit (₹)</th>
               <th style="padding: 10px; text-align: right;">Credit (₹)</th>
+              <th style="padding: 10px; text-align: center;">Actions</th>
             </tr>
           </thead>
           <tbody id="auditTrailBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Feature 2: System Mutation Audit Logs -->
+    <div style="background: #ffffff; padding: 24px; border-radius: 8px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px;">
+      <h3 style="margin-top: 0; margin-bottom: 16px; color: #0f172a;">System Audit Log & Delta Tracker</h3>
+      <div style="max-height: 200px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 6px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: left;">
+          <thead>
+            <tr style="background: #f8fafc; border-bottom: 1px solid #cbd5e1; color: #475569;">
+              <th style="padding: 8px;">Timestamp</th>
+              <th style="padding: 8px;">Action</th>
+              <th style="padding: 8px;">Entity Reference</th>
+              <th style="padding: 8px;">Details / Snapshot Delta</th>
+            </tr>
+          </thead>
+          <tbody id="deltaLogBody"></tbody>
         </table>
       </div>
     </div>
@@ -270,6 +342,45 @@ app.innerHTML = `
   </div>
 `;
 
+// Helper: Add Audit Event Entry
+function logAuditEvent(action, entityId, details) {
+  const logEntry = {
+    timestamp: new Date().toLocaleString(),
+    action,
+    entityId,
+    details
+  };
+  auditLogs.unshift(logEntry);
+  localStorage.setItem('caas_audit_logs', JSON.stringify(auditLogs));
+  renderDeltaLogs();
+}
+
+// Render System Mutation Delta Logs
+function renderDeltaLogs() {
+  const tbody = document.getElementById('deltaLogBody');
+  if (auditLogs.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="padding: 10px; text-align: center; color: #94a3b8;">No system mutations recorded yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = auditLogs.map(log => `
+    <tr style="border-bottom: 1px solid #f1f5f9;">
+      <td style="padding: 6px 8px; color: #64748b;">${log.timestamp}</td>
+      <td style="padding: 6px 8px; font-weight: 600; color: #0284c7;">${log.action}</td>
+      <td style="padding: 6px 8px; font-weight: 500;">${log.entityId}</td>
+      <td style="padding: 6px 8px; color: #334155;">${log.details}</td>
+    </tr>
+  `).join('');
+}
+
+// Save Period Lock Policy
+document.getElementById('savePeriodLockBtn').addEventListener('click', () => {
+  periodLockState.status = document.getElementById('periodStatusSelect').value;
+  periodLockState.closedBeforeDate = document.getElementById('lockBeforeDate').value;
+  localStorage.setItem('caas_period_lock', JSON.stringify(periodLockState));
+  logAuditEvent('LOCK_POLICY_UPDATE', 'SYSTEM', `Status: ${periodLockState.status}, Locked before: ${periodLockState.closedBeforeDate || 'None'}`);
+  alert('Period close locking policy updated successfully.');
+});
+
 // Helper: Get CoA Dropdown Options HTML
 function getCoAOptionsHTML() {
   coaMaster.sort((a, b) => Number(a.code) - Number(b.code));
@@ -308,7 +419,7 @@ function renderCOATable() {
   if (currentFilter) ledgerSelect.value = currentFilter;
 }
 
-// Render Voucher Audit Trail
+// Render Voucher Audit Trail with Deletion Hook
 function renderAuditTrail() {
   const tbody = document.getElementById('auditTrailBody');
   const filterCode = document.getElementById('ledgerFilterSelect').value;
@@ -316,7 +427,7 @@ function renderAuditTrail() {
   tbody.innerHTML = '';
 
   if (transactions.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="padding: 14px; text-align: center; color: #94a3b8;">No posted vouchers found in the audit trail.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="padding: 14px; text-align: center; color: #94a3b8;">No posted vouchers found in the audit trail.</td></tr>`;
     return;
   }
 
@@ -341,19 +452,50 @@ function renderAuditTrail() {
         <td style="padding: 8px 10px;"><strong>${line.account_code}</strong> - ${line.account_name}</td>
         <td style="padding: 8px 10px; text-align: right; font-family: monospace;">${line.debit > 0 ? line.debit.toFixed(2) : '-'}</td>
         <td style="padding: 8px 10px; text-align: right; font-family: monospace;">${line.credit > 0 ? line.credit.toFixed(2) : '-'}</td>
+        <td style="padding: 8px 10px; text-align: center;">
+          ${index === 0 ? `<button class="delete-v-btn" data-id="${v.voucher_id}" style="background: #fee2e2; color: #dc2626; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; cursor: pointer;">Delete</button>` : ''}
+        </td>
       `;
       tbody.appendChild(row);
     });
   });
+
+  document.querySelectorAll('.delete-v-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const vId = e.target.getAttribute('data-id');
+      deleteVoucher(vId);
+    });
+  });
+}
+
+// Delete Voucher Action
+function deleteVoucher(voucherId) {
+  const targetIndex = transactions.findIndex(v => v.voucher_id === voucherId);
+  if (targetIndex === -1) return;
+
+  const target = transactions[targetIndex];
+
+  // Period Lock Check for Deletion
+  if (periodLockState.status === 'HARD_CLOSED' && periodLockState.closedBeforeDate && target.date <= periodLockState.closedBeforeDate) {
+    alert(`Deletion Blocked! Voucher ${voucherId} falls in a Hard-Closed accounting period.`);
+    return;
+  }
+
+  if (confirm(`Are you sure you want to delete Voucher ${voucherId}? This action will be audited.`)) {
+    transactions.splice(targetIndex, 1);
+    localStorage.setItem('caas_ledger_state', JSON.stringify(transactions));
+    logAuditEvent('VOUCHER_DELETED', voucherId, `Amount: ₹${target.total_amount.toFixed(2)}, Date: ${target.date}`);
+    renderTrialBalance();
+    renderAuditTrail();
+  }
 }
 
 document.getElementById('ledgerFilterSelect').addEventListener('change', renderAuditTrail);
 
-// Schedule III Aggregator Engine (P&L and Balance Sheet)
+// Schedule III Aggregator Engine
 function renderScheduleIIIFinancials(accountBalances) {
   const tagTotals = {};
 
-  // Group balances by Schedule III Tag
   Object.keys(accountBalances).forEach(code => {
     const coaItem = coaMaster.find(a => String(a.code) === String(code));
     if (!coaItem) return;
@@ -365,7 +507,6 @@ function renderScheduleIIIFinancials(accountBalances) {
     tagTotals[tag] += net;
   });
 
-  // Profit & Loss Mapping
   const revOps = Math.abs(tagTotals['Revenue from Operations'] || 0);
   const costMat = tagTotals['Cost of Materials Consumed'] || 0;
   const otherExp = tagTotals['Other Operating Expenses'] || 0;
@@ -389,7 +530,6 @@ function renderScheduleIIIFinancials(accountBalances) {
     <td style="padding: 8px 0; text-align: right; color: ${netProfit >= 0 ? '#16a34a' : '#dc2626'};">₹${netProfit.toFixed(2)}</td>
   `;
 
-  // Balance Sheet Mapping
   const shareCapital = Math.abs(tagTotals['Share Capital'] || 0);
   const reservesSurplus = (Math.abs(tagTotals['Reserves & Surplus'] || 0)) + netProfit;
   const ppe = tagTotals['Property, Plant & Equipment'] || 0;
@@ -474,6 +614,7 @@ document.getElementById('coaForm').addEventListener('submit', (e) => {
 
   coaMaster.push({ code, name, groupKey, balance, tag });
   localStorage.setItem('caas_master_coa', JSON.stringify(coaMaster));
+  logAuditEvent('COA_ACCOUNT_CREATED', String(code), `Name: ${name}, Tag: ${tag}`);
 
   renderCOATable();
 
@@ -635,11 +776,22 @@ function renderTrialBalance() {
   renderScheduleIIIFinancials(accountBalances);
 }
 
-// Post Voucher Action
+// Post Voucher Action with Period-Lock Validation
 document.getElementById('postBtn').addEventListener('click', () => {
   const type = document.getElementById('vType').value;
   const date = document.getElementById('vDate').value;
   const { totalDr, isBalanced } = calculateVoucherTotals();
+
+  // Period Lock Check
+  if (periodLockState.closedBeforeDate && date <= periodLockState.closedBeforeDate) {
+    if (periodLockState.status === 'HARD_CLOSED') {
+      alert(`Posting Blocked! The accounting period up to ${periodLockState.closedBeforeDate} is HARD-CLOSED.`);
+      return;
+    } else if (periodLockState.status === 'SOFT_CLOSED') {
+      const proceed = confirm(`Warning: You are posting into a SOFT-CLOSED period (ended ${periodLockState.closedBeforeDate}). Do you want to proceed?`);
+      if (!proceed) return;
+    }
+  }
 
   if (!isBalanced) {
     alert('Cannot post voucher. Debits must equal Credits.');
@@ -681,6 +833,7 @@ document.getElementById('postBtn').addEventListener('click', () => {
 
   transactions.push(newVoucher);
   localStorage.setItem('caas_ledger_state', JSON.stringify(transactions));
+  logAuditEvent('VOUCHER_POSTED', newVoucher.voucher_id, `Type: ${type}, Amount: ₹${totalDr.toFixed(2)}, Date: ${date}`);
 
   renderTrialBalance();
   renderAuditTrail();
@@ -690,9 +843,71 @@ document.getElementById('postBtn').addEventListener('click', () => {
   addLineRow('Cr');
 });
 
+// JSON Backup Download
+document.getElementById('exportBackupBtn').addEventListener('click', () => {
+  const systemState = {
+    coaMaster,
+    transactions,
+    auditLogs,
+    periodLockState,
+    exportedAt: new Date().toISOString()
+  };
+  const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(systemState, null, 2));
+  const dlAnchor = document.createElement('a');
+  dlAnchor.setAttribute('href', dataStr);
+  dlAnchor.setAttribute('download', `caas_erp_backup_${new Date().toISOString().split('T')[0]}.json`);
+  document.body.appendChild(dlAnchor);
+  dlAnchor.click();
+  dlAnchor.remove();
+  logAuditEvent('BACKUP_EXPORTED', 'SYSTEM', 'Complete ERP system state exported.');
+});
+
+// JSON Backup Restore
+document.getElementById('restoreBackupInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const data = JSON.parse(event.target.result);
+      if (data.coaMaster && data.transactions) {
+        coaMaster = data.coaMaster;
+        transactions = data.transactions;
+        if (data.auditLogs) auditLogs = data.auditLogs;
+        if (data.periodLockState) periodLockState = data.periodLockState;
+
+        localStorage.setItem('caas_master_coa', JSON.stringify(coaMaster));
+        localStorage.setItem('caas_ledger_state', JSON.stringify(transactions));
+        localStorage.setItem('caas_audit_logs', JSON.stringify(auditLogs));
+        localStorage.setItem('caas_period_lock', JSON.stringify(periodLockState));
+
+        renderCOATable();
+        renderTrialBalance();
+        renderAuditTrail();
+        renderDeltaLogs();
+
+        logAuditEvent('BACKUP_RESTORED', 'SYSTEM', `Restored backup created at ${data.exportedAt || 'Unknown'}`);
+        alert('CAAS ERP state restored successfully!');
+      } else {
+        alert('Invalid backup file structure.');
+      }
+    } catch (err) {
+      alert('Error parsing backup file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+});
+
+// Print Financial Statements
+document.getElementById('printFinancialsBtn').addEventListener('click', () => {
+  window.print();
+});
+
 // Initial Setup Calls
 renderCOATable();
 addLineRow('Dr');
 addLineRow('Cr');
 renderTrialBalance();
 renderAuditTrail();
+renderDeltaLogs();
